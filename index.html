@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebSocket Physics</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+        #joystickContainer {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 100px;
+            height: 100px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <div id="joystickContainer"></div>
+    <script src="/socket.io/socket.io.js"></script>
+    <!-- CDN NippleJS -->
+    <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.9.0/dist/nipplejs.min.js"></script>
+    <script>
+        const socket = io();
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const players = {};
+
+        // Update pemain di kanvas
+        socket.on('updatePlayers', (updatedPlayers) => {
+            // Kosongkan objek players sebelum memperbarui
+            Object.keys(players).forEach(key => delete players[key]);
+            // Salin data pemain terbaru dari server
+            Object.assign(players, updatedPlayers);
+            // Gambar ulang semua pemain
+            drawPlayers();
+        });
+
+
+        function drawPlayers() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let id in players) {
+                const player = players[id];
+                ctx.fillStyle = player.color;
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, 10, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = 'black';
+
+                // Menghitung dan menampilkan jarak
+                for (let otherId in players) {
+                    if (id !== otherId) {
+                        const otherPlayer = players[otherId];
+
+                        // Euclidean Distance - Vektor Jarak
+                        const distance = Math.sqrt(
+                            Math.pow(player.x - otherPlayer.x, 2) + 
+                            Math.pow(player.y - otherPlayer.y, 2)
+                        );
+                        ctx.fillText(
+                            `Jarak ke ${otherId}: ${distance.toFixed(2)}`,
+                            player.x + 10,
+                            player.y + 10
+                        );
+                    }
+                }
+            }
+        }
+
+        // kebawah bagian 
+        // Displacement Vector - Perpindahan Posisi
+
+        // Deteksi pergerakan melalui keyboard
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp') socket.emit('move', 'up');
+            if (e.key === 'ArrowDown') socket.emit('move', 'down');
+            if (e.key === 'ArrowLeft') socket.emit('move', 'left');
+            if (e.key === 'ArrowRight') socket.emit('move', 'right');
+        });
+
+        // Setup joystick untuk kontrol mobile
+        const joystick = nipplejs.create({
+            zone: document.getElementById('joystickContainer'),
+            mode: 'static',
+            position: { left: '50px', bottom: '50px' },
+            color: 'blue'
+        });
+
+        // Emit pergerakan berdasarkan input joystick
+        joystick.on('move', (evt, data) => {
+            const angle = data.angle.degree;
+
+            // Nilai force menunjukkan seberapa kuat pengguna menggerakkan joystick
+            const intensity = data.force; 
+
+            // Atur kecepatan pergerakan
+            // Semakin kecil nilai, semakin lambat
+            const speed = 1 * intensity; 
+
+            if (angle >= 45 && angle < 135) {
+                socket.emit('move', 'up');
+            } else if (angle >= 135 && angle < 225) {
+                socket.emit('move', 'left');
+            } else if (angle >= 225 && angle < 315) {
+                socket.emit('move', 'down');
+            } else {
+                socket.emit('move', 'right');
+            }
+        });
+
+
+
+        joystick.on('end', () => {
+            // Hentikan pergerakan ketika joystick dilepas
+            socket.emit('move', 'stop');
+        });
+    </script>
+</body>
+</html>
